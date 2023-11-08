@@ -465,7 +465,7 @@ int ObStorageSchema::init(
     column_group_array_.set_allocator(&allocator);
     skip_idx_attr_array_.set_allocator(&allocator);
 
-    storage_schema_version_ = STORAGE_SCHEMA_VERSION_V3;
+    storage_schema_version_ = old_schema.storage_schema_version_;
     copy_from(old_schema);
     compat_mode_ = old_schema.compat_mode_;
     compressor_type_ = old_schema.compressor_type_;
@@ -805,13 +805,16 @@ int ObStorageSchema::deserialize(
         store_column_cnt_ = get_store_column_count_by_column_array();
       }
       ObStorageColumnGroupSchema column_group;
+      uint64_t compat_version = 0;
       if (FAILEDx(generate_all_column_group_schema(column_group, row_store_type_))) {
         STORAGE_LOG(WARN, "Failed to mock column group for compat", K(ret));
       } else if (OB_FAIL(column_group_array_.reserve(1))) {
         STORAGE_LOG(WARN, "failed to reserve for column group array", K(ret));
       } else if (OB_FAIL(add_column_group(column_group))) {
         STORAGE_LOG(WARN, "failed to add column group", K(ret), K(column_group));
-      } else {
+      } else if (OB_FAIL(GET_MIN_DATA_VERSION(MTL_ID(), compat_version))) {
+        STORAGE_LOG(WARN, "failed to add column group", K(ret), K(MTL_ID()));
+      } else if (compat_version >= DATA_VERSION_4_3_0_0) {
         storage_schema_version_ = STORAGE_SCHEMA_VERSION_V3;
       }
     } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &store_column_cnt_))) {
@@ -982,8 +985,8 @@ int ObStorageSchema::generate_all_column_group_schema(ObStorageColumnGroupSchema
     column_group.version_ = ObStorageColumnGroupSchema::COLUMN_GRUOP_SCHEMA_VERSION;
     column_group.type_ = ALL_COLUMN_GROUP;
     column_group.schema_column_cnt_ = store_column_cnt_;
-    column_group.rowkey_column_cnt_ = get_rowkey_column_num();
-    column_group.schema_rowkey_column_cnt_ = column_group.rowkey_column_cnt_ - ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
+    column_group.rowkey_column_cnt_ = get_rowkey_column_num() + ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
+    column_group.schema_rowkey_column_cnt_ = get_rowkey_column_num();
     column_group.column_cnt_ = column_group.schema_column_cnt_ + ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
     column_group.column_idxs_ = nullptr;
     column_group.block_size_ = block_size_;
@@ -1579,6 +1582,10 @@ void ObStorageSchema::update_column_cnt(const int64_t input_col_cnt)
 {
   column_cnt_ = MAX(column_cnt_, input_col_cnt);
   store_column_cnt_ = MAX(store_column_cnt_, input_col_cnt);
+  if (column_cnt_ != column_array_.count()) {
+    column_info_simplified_ = true;
+    STORAGE_LOG(INFO, "update column cnt", K(column_cnt_), K(store_column_cnt_), K(column_cnt_), K(column_array_.count()));
+  }
 }
 
 } // namespace storage

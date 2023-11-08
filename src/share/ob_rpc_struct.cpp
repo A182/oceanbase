@@ -3829,11 +3829,11 @@ DEF_TO_STRING(ObSwitchLeaderArg)
 OB_SERIALIZE_MEMBER(ObSwitchLeaderArg, ls_id_, role_, tenant_id_, dest_server_);
 
 OB_SERIALIZE_MEMBER(ObLSTabletPair, ls_id_, tablet_id_);
-OB_SERIALIZE_MEMBER(ObCheckSchemaVersionElapsedArg, tenant_id_, schema_version_, need_wait_trans_end_, tablets_);
+OB_SERIALIZE_MEMBER(ObCheckSchemaVersionElapsedArg, tenant_id_, schema_version_, need_wait_trans_end_, tablets_, ddl_task_id_);
 
 bool ObCheckSchemaVersionElapsedArg::is_valid() const
 {
-  bool bret = OB_INVALID_ID != tenant_id_ && schema_version_ > 0 && !tablets_.empty();
+  bool bret = OB_INVALID_ID != tenant_id_ && schema_version_ > 0 && !tablets_.empty() && ddl_task_id_ >= 0;
   for (int64_t i = 0; bret && i < tablets_.count(); ++i) {
     bret = tablets_.at(i).is_valid();
   }
@@ -3846,11 +3846,12 @@ void ObCheckSchemaVersionElapsedArg::reuse()
   schema_version_ = 0;
   need_wait_trans_end_ = true;
   tablets_.reuse();
+  ddl_task_id_ = 0;
 }
 
 bool ObCheckModifyTimeElapsedArg::is_valid() const
 {
-  bool bret = OB_INVALID_ID != tenant_id_ && sstable_exist_ts_ > 0;
+  bool bret = OB_INVALID_ID != tenant_id_ && sstable_exist_ts_ > 0 && ddl_task_id_ >= 0;
   for (int64_t i = 0; bret && i < tablets_.count(); ++i) {
     bret = tablets_.at(i).is_valid();
   }
@@ -3876,9 +3877,10 @@ void ObCheckModifyTimeElapsedArg::reuse()
   tenant_id_ = OB_INVALID_ID;
   sstable_exist_ts_ = 0;
   tablets_.reuse();
+  ddl_task_id_ = 0;
 }
 
-OB_SERIALIZE_MEMBER(ObCheckModifyTimeElapsedArg, tenant_id_, sstable_exist_ts_, tablets_);
+OB_SERIALIZE_MEMBER(ObCheckModifyTimeElapsedArg, tenant_id_, sstable_exist_ts_, tablets_, ddl_task_id_);
 
 bool ObCheckSchemaVersionElapsedResult::is_valid() const
 {
@@ -5451,22 +5453,35 @@ int ObCreateUDTArg::assign(const ObCreateUDTArg &other)
   } else {
     db_name_ = other.db_name_;
     is_or_replace_ = other.is_or_replace_;
+    is_force_ = other.is_force_;
+    exist_valid_udt_ = other.exist_valid_udt_;
   }
   return ret;
 }
 
-OB_SERIALIZE_MEMBER((ObCreateUDTArg, ObDDLArg), udt_info_, db_name_, is_or_replace_,
-                                                error_info_,
-                                                public_routine_infos_,
-                                                dependency_infos_);
+OB_SERIALIZE_MEMBER((ObCreateUDTArg, ObDDLArg),
+                    udt_info_,
+                    db_name_,
+                    is_or_replace_,
+                    error_info_,
+                    public_routine_infos_,
+                    dependency_infos_,
+                    is_force_,
+                    exist_valid_udt_);
 
 bool ObDropUDTArg::is_valid() const
 {
   return OB_INVALID_ID != tenant_id_ && !db_name_.empty() && !udt_name_.empty();
 }
 
-OB_SERIALIZE_MEMBER((ObDropUDTArg, ObDDLArg), tenant_id_, db_name_,
-                     udt_name_, if_exist_, is_type_body_, force_or_validate_);
+OB_SERIALIZE_MEMBER((ObDropUDTArg, ObDDLArg),
+                    tenant_id_,
+                    db_name_,
+                    udt_name_,
+                    if_exist_,
+                    is_type_body_,
+                    force_or_validate_,
+                    exist_valid_udt_);
 
 OB_SERIALIZE_MEMBER(ObCancelTaskArg, task_id_);
 
@@ -7662,22 +7677,25 @@ OB_SERIALIZE_MEMBER(ObLSAccessModeInfo, tenant_id_, ls_id_, mode_version_, acces
 
 bool ObChangeLSAccessModeRes::is_valid() const
 {
-  return OB_INVALID_TENANT_ID != tenant_id_
-         && ls_id_.is_valid();
+  return OB_INVALID_TENANT_ID != tenant_id_ && ls_id_.is_valid() && wait_sync_scn_cost_ >= 0 && change_access_mode_cost_ >= 0;
 }
 int ObChangeLSAccessModeRes::init(
     uint64_t tenant_id, const ObLSID &ls_id,
-    int result)
+    const int result, const int64_t wait_sync_scn_cost, const int64_t change_access_mode_cost)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id
-                  || !ls_id.is_valid())) {
+                  || !ls_id.is_valid()
+                  || wait_sync_scn_cost < 0
+                  || change_access_mode_cost < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(ls_id));
+    LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(ls_id), K(wait_sync_scn_cost), K(change_access_mode_cost));
   } else {
     tenant_id_ = tenant_id;
     ls_id_ = ls_id;
     ret_ = result;
+    wait_sync_scn_cost_ = wait_sync_scn_cost;
+    change_access_mode_cost_ = change_access_mode_cost;
   }
   return ret;
 }
@@ -7688,12 +7706,14 @@ int ObChangeLSAccessModeRes::assign(const ObChangeLSAccessModeRes &other)
   if (this != &other) {
     tenant_id_ = other.tenant_id_;
     ls_id_ = other.ls_id_;
-    ret = other.ret_;
+    ret_ = other.ret_;
+    wait_sync_scn_cost_ = other.wait_sync_scn_cost_;
+    change_access_mode_cost_ = other.change_access_mode_cost_;
   }
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObChangeLSAccessModeRes, tenant_id_, ls_id_, ret_);
+OB_SERIALIZE_MEMBER(ObChangeLSAccessModeRes, tenant_id_, ls_id_, ret_, wait_sync_scn_cost_, change_access_mode_cost_);
 
 int ObNotifySwitchLeaderArg::init(const uint64_t tenant_id, const share::ObLSID &ls_id,
     const common::ObAddr &leader, const SwitchLeaderComment &comment)

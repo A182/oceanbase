@@ -2853,8 +2853,13 @@ int ObSQLUtils::choose_best_partition_replica_addr(const ObAddr &local_addr,
                                                             candi_locality))) {
         LOG_WARN("fail to get server locality", K(all_server_arr), K(candi_addr), K(ret));
       } else if (OB_UNLIKELY(!candi_locality.is_init())) {
-        // not find
-        // do nothing
+        //maybe the locality cache hasn't been flushed yet, we just trust it.
+        if (local_addr == candi_addr) {
+          selected_addr = candi_addr;
+          need_continue = false;
+        } else if (OB_FAIL(other_region_addr.push_back(candi_addr))) {
+          LOG_WARN("failed to push back other region candidate address", K(ret));
+        } else {/*do nothing*/}
       } else if (!candi_locality.is_active()
                  || ObServerStatus::OB_SERVER_ACTIVE != candi_locality.get_server_status()
                  || 0 == candi_locality.get_start_service_time()
@@ -4471,6 +4476,21 @@ bool ObSQLUtils::is_iter_uncommitted_row(ObExecContext *cur_ctx)
 bool ObSQLUtils::is_nested_sql(ObExecContext *cur_ctx)
 {
   return is_pl_nested_sql(cur_ctx) || is_fk_nested_sql(cur_ctx);
+}
+
+bool ObSQLUtils::is_in_autonomous_block(ObExecContext *cur_ctx)
+{
+  bool bret = false;
+  pl::ObPLContext *pl_context = nullptr;
+  if (cur_ctx != nullptr) {
+    pl_context = cur_ctx->get_pl_stack_ctx();
+    for (; !bret && pl_context != nullptr; pl_context = pl_context->get_parent_stack_ctx()) {
+      if (pl_context->in_autonomous()) {
+        bret = true;
+      }
+    }
+  }
+  return bret;
 }
 
 bool ObSQLUtils::is_select_from_dual(ObExecContext &ctx)

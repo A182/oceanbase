@@ -256,7 +256,7 @@ void ObSSTablePrinter::print_cell(const ObObj &cell)
 
 void ObSSTablePrinter::print_cell(const ObStorageDatum &datum)
 {
-  P_VALUE_STR_B(to_cstring(datum));
+  P_VALUE_STR_B(datum.to_cstring(true /* for dump */));
 }
 
 void ObSSTablePrinter::print_common_header(const ObMacroBlockCommonHeader *common_header)
@@ -536,7 +536,7 @@ void ObSSTablePrinter::print_store_row(
       ObMemAttr mem_attr;
       mem_attr.label_ = "TX_DATA_TABLE";
       void *p = op_alloc(ObSliceAlloc);
-      auto slice_allocator = new (p) ObSliceAlloc(storage::TX_DATA_SLICE_SIZE, mem_attr);
+      common::ObSliceAlloc *slice_allocator = new (p) ObSliceAlloc(storage::TX_DATA_SLICE_SIZE, mem_attr);
 
       ObTxData tx_data;
       tx_data.tx_id_ = tx_id;

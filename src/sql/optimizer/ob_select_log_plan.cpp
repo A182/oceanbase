@@ -343,7 +343,6 @@ int ObSelectLogPlan::candi_allocate_three_stage_group_by(const ObIArray<ObRawExp
       } else if (!candidate_plan.plan_tree_->is_distributed() || is_partition_wise) {
         bool part_sort_valid = !groupby_helper.force_normal_sort_ && !group_by_exprs.empty();
         bool normal_sort_valid = !groupby_helper.force_part_sort_;
-        bool can_ignore_merge_plan = !(groupby_plans.empty() || groupby_helper.force_use_merge_);
         if (OB_FAIL(update_part_sort_method(part_sort_valid, normal_sort_valid))) {
           LOG_WARN("fail to update part sort method", K(ret));
         } else if (OB_FAIL(create_merge_group_plan(reduce_exprs,
@@ -359,7 +358,7 @@ int ObSelectLogPlan::candi_allocate_three_stage_group_by(const ObIArray<ObRawExp
                                                   groupby_plans,
                                                   part_sort_valid,
                                                   normal_sort_valid,
-                                                  can_ignore_merge_plan))) {
+                                                  false))) {
           LOG_WARN("failed to create merge group by plan", K(ret));
         }
       } else {
@@ -736,8 +735,9 @@ int ObSelectLogPlan::create_hash_group_plan(const ObIArray<ObRawExpr*> &reduce_e
                                          origin_child_card,
                                          is_partition_wise))) {
       LOG_WARN("failed to allocate group by as top", K(ret));
+    } else {
+      static_cast<ObLogGroupBy*>(top)->set_group_by_outline_info(true, false);
     }
-    static_cast<ObLogGroupBy*>(top)->set_group_by_outline_info(true, false);
   } else {
     // allocate push down group by
     if (groupby_helper.can_basic_pushdown_) {

@@ -1202,6 +1202,7 @@ int ObAlterTableResolver::resolve_index_column_list(const ParseNode &node,
     //reset sort column set
     sort_column_array_.reset();
     cnt_func_index = false;
+    OZ (add_new_indexkey_for_oracle_temp_table(index_arg));
     for (int32_t i = 0; OB_SUCC(ret) && i < node.num_child_; ++i) {
       ParseNode *sort_column_node = node.children_[i];
       if (OB_ISNULL(sort_column_node) ||
@@ -2046,6 +2047,9 @@ int ObAlterTableResolver::generate_index_arg(obrpc::ObCreateIndexArg &index_arg,
     index_arg.with_rowid_ = with_rowid_;
     if (OB_SUCC(ret)) {
       ObIndexType type = INDEX_TYPE_IS_NOT;
+      if (OB_NOT_NULL(table_schema_) && table_schema_->is_oracle_tmp_table()) {
+        index_scope_ = LOCAL_INDEX;
+      }
       if (NOT_SPECIFIED == index_scope_) {
         // MySQL default index mode is local,
         // and Oracle default index mode is global
@@ -5933,7 +5937,14 @@ int ObAlterTableResolver::resolve_column_group()
             cg_name, column_ids, ++cur_column_group_id, column_group))) {
         LOG_WARN("failed to build column group", K(ret), KPC(column));
       } else if (OB_FAIL(alter_table_stmt->add_column_group(column_group))) {
-        LOG_WARN("failed to add column group", K(ret));
+        // only used for duplicate column in sql
+        if (OB_HASH_EXIST == ret) {
+          ret = OB_ERR_COLUMN_DUPLICATE;
+          LOG_USER_ERROR(OB_ERR_COLUMN_DUPLICATE, column->get_column_name_str().length(), column->get_column_name_str().ptr());
+          LOG_WARN("duplicate column name", K(ret), K(column));
+        } else {
+          LOG_WARN("failed to add column group", K(ret));
+        }
       } else if (OB_FAIL(column->set_column_group_name(cg_name))) {
         LOG_WARN("failed to set column group name", K(ret), KPC(column));
       }
@@ -6051,6 +6062,24 @@ int ObAlterTableResolver::check_drop_column_is_partition_key(const ObTableSchema
                      column_name.length(),
                      column_name.ptr());
       LOG_WARN("alter column has table part key deps", K(ret), K(origin_column));
+    }
+  }
+  return ret;
+}
+
+int ObAlterTableResolver::add_new_indexkey_for_oracle_temp_table(obrpc::ObCreateIndexArg &index_arg)
+{
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(table_schema_) && table_schema_->is_oracle_tmp_table()) {
+    ObColumnSortItem sort_item;
+    sort_item.column_name_.assign_ptr(OB_HIDDEN_SESSION_ID_COLUMN_NAME,
+                                      static_cast<int32_t>(strlen(OB_HIDDEN_SESSION_ID_COLUMN_NAME)));
+    sort_item.prefix_len_ = 0;
+    sort_item.order_type_ = common::ObOrderType::ASC;
+    if (OB_FAIL(add_sort_column(sort_item, index_arg))) {
+      SQL_RESV_LOG(WARN, "add sort column failed", K(ret), K(sort_item));
+    } else {
+      LOG_DEBUG("add __session_id as first index key succeed", K(sort_item));
     }
   }
   return ret;

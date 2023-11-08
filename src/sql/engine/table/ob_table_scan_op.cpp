@@ -923,10 +923,12 @@ OB_INLINE int ObTableScanOp::init_das_scan_rtdef(const ObDASScanCtDef &das_ctdef
     int64_t schema_version = task_exec_ctx.get_query_tenant_begin_schema_version();
     das_rtdef.tenant_schema_version_ = schema_version;
   }
-  if (OB_SUCC(ret) && MY_SPEC.ref_table_id_ == das_ctdef.ref_table_id_) {
-    //only data table scan need to set flashback query info
+  if (OB_SUCC(ret)) {
     if (OB_FAIL(tsc_ctdef.flashback_item_.set_flashback_query_info(eval_ctx_, das_rtdef))) {
       LOG_WARN("failed to set flashback query snapshot version", K(ret));
+    } else if (MY_SPEC.ref_table_id_ != das_ctdef.ref_table_id_) {
+      //only data table scan need to set row scn flag
+      das_rtdef.need_scn_ = false;
     }
   }
   if (OB_SUCC(ret)) {
@@ -1651,6 +1653,9 @@ bool ObTableScanOp::need_real_rescan()
 {
   bool bret = false;
   if (!MY_SPEC.batch_scan_flag_) {
+    bret = true;
+  } else if (tsc_rtdef_.bnlj_params_.empty()) {
+    //batch rescan not init, need to do real rescan
     bret = true;
   } else {
     ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
@@ -3059,7 +3064,10 @@ int ObGlobalIndexLookupOpImpl::close()
 int ObGlobalIndexLookupOpImpl::rescan()
 {
   int ret = OB_SUCCESS;
-  if (get_batch_rescan() && lookup_group_cnt_ < index_group_cnt_) {
+  if (OB_ISNULL(table_scan_op_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table scan op not init", K(ret));
+  } else if (!table_scan_op_->need_real_rescan() && lookup_group_cnt_ < index_group_cnt_) {
     LOG_DEBUG("rescan in group lookup, only need to switch iterator",
               K(lookup_group_cnt_), K(index_group_cnt_));
     if (OB_FAIL(table_scan_op_->build_bnlj_params())) {

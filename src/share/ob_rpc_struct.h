@@ -1928,6 +1928,7 @@ public:
        ENABLE_EXTENDED_ROWID,
        TTL_DEFINITION,
        KV_ATTRIBUTES,
+       LOB_INROW_THRESHOLD,
        MAX_OPTION = 1000
   };
   enum AlterPartitionType
@@ -3310,12 +3311,12 @@ struct ObChangeLSAccessModeRes
   OB_UNIS_VERSION(1);
 public:
   ObChangeLSAccessModeRes(): tenant_id_(OB_INVALID_TENANT_ID),
-                              ls_id_(), ret_(common::OB_SUCCESS) {}
+                              ls_id_(), ret_(common::OB_SUCCESS), wait_sync_scn_cost_(0), change_access_mode_cost_(0) {}
   ~ObChangeLSAccessModeRes() {}
   bool is_valid() const;
-  int init(uint64_t tenant_id, const share::ObLSID& ls_id, int ret);
+  int init(uint64_t tenant_id, const share::ObLSID& ls_id, const int result, const int64_t wait_sync_scn_cost, const int64_t change_access_mode_cost);
   int assign(const ObChangeLSAccessModeRes &other);
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(ret));
+  TO_STRING_KV(K_(tenant_id), "ls_id", ls_id_.id(), K_(ret), K_(wait_sync_scn_cost), K_(change_access_mode_cost));
   int get_result() const
   {
     return ret_;
@@ -3328,12 +3329,16 @@ public:
   {
     return ls_id_;
   }
+  int64_t get_wait_sync_scn_cost() const { return wait_sync_scn_cost_; }
+  int64_t get_change_access_mode_cost() const { return change_access_mode_cost_; }
 private:
   DISALLOW_COPY_AND_ASSIGN(ObChangeLSAccessModeRes);
 private:
   uint64_t tenant_id_;
   share::ObLSID ls_id_;
   int ret_;
+  int64_t wait_sync_scn_cost_;
+  int64_t change_access_mode_cost_;
 };
 
 struct ObNotifySwitchLeaderArg
@@ -4420,16 +4425,17 @@ struct ObCheckSchemaVersionElapsedArg final
   OB_UNIS_VERSION(1);
 public:
   ObCheckSchemaVersionElapsedArg()
-    : tenant_id_(), schema_version_(0), need_wait_trans_end_(true)
+    : tenant_id_(), schema_version_(0), need_wait_trans_end_(true), ddl_task_id_(0)
   {}
   bool is_valid() const;
   void reuse();
-  TO_STRING_KV(K_(tenant_id), K_(schema_version), K_(need_wait_trans_end), K_(tablets));
+  TO_STRING_KV(K_(tenant_id), K_(schema_version), K_(need_wait_trans_end), K_(tablets), K_(ddl_task_id));
 
   uint64_t tenant_id_;
   int64_t schema_version_;
   bool need_wait_trans_end_;
   ObSEArray<ObLSTabletPair, 10> tablets_;
+  int64_t ddl_task_id_;
 };
 
 struct ObDDLCheckTabletMergeStatusArg final
@@ -4463,13 +4469,14 @@ struct ObCheckModifyTimeElapsedArg final
 {
   OB_UNIS_VERSION(1);
 public:
-  ObCheckModifyTimeElapsedArg() : tenant_id_(OB_INVALID_ID), sstable_exist_ts_(0) {}
+  ObCheckModifyTimeElapsedArg() : tenant_id_(OB_INVALID_ID), sstable_exist_ts_(0), ddl_task_id_(0) {}
   bool is_valid() const;
   void reuse();
-  TO_STRING_KV(K_(tenant_id), K_(sstable_exist_ts), K_(tablets));
+  TO_STRING_KV(K_(tenant_id), K_(sstable_exist_ts), K_(tablets), K_(ddl_task_id));
   uint64_t tenant_id_;
   int64_t sstable_exist_ts_;
   ObSEArray<ObLSTabletPair, 10> tablets_;
+  int64_t ddl_task_id_;
 };
 
 struct ObCheckTransElapsedResult final
@@ -6421,7 +6428,13 @@ struct ObCreateUDTArg : public ObDDLArg
 {
   OB_UNIS_VERSION(1);
 public:
-  ObCreateUDTArg(): udt_info_(), db_name_(), is_or_replace_(false), error_info_() {}
+  ObCreateUDTArg()
+    : udt_info_(),
+      db_name_(),
+      is_or_replace_(false),
+      error_info_(),
+      is_force_(true),
+      exist_valid_udt_(false) {}
   virtual ~ObCreateUDTArg() {}
   bool is_valid() const;
   int assign(const ObCreateUDTArg &other);
@@ -6430,7 +6443,9 @@ public:
                K_(is_or_replace),
                K_(error_info),
                K_(public_routine_infos),
-               K_(dependency_infos));
+               K_(dependency_infos),
+               K_(is_force),
+               K_(exist_valid_udt));
 
   share::schema::ObUDTTypeInfo udt_info_;
   common::ObString db_name_;
@@ -6438,6 +6453,8 @@ public:
   share::schema::ObErrorInfo error_info_;
   common::ObSArray<share::schema::ObRoutineInfo> public_routine_infos_;
   common::ObSArray<share::schema::ObDependencyInfo> dependency_infos_;
+  bool is_force_;
+  bool exist_valid_udt_;
 };
 
 struct ObDropUDTArg : public ObDDLArg
@@ -6450,12 +6467,18 @@ public:
       udt_name_(),
       if_exist_(false),
       is_type_body_(false),
-      force_or_validate_(0) {}
+      force_or_validate_(1), // default force for backward compatibility
+      exist_valid_udt_(false) {}
   virtual ~ObDropUDTArg() {}
   bool is_valid() const;
   virtual bool is_allow_when_upgrade() const { return true; }
-  TO_STRING_KV(K_(tenant_id), K_(db_name), K_(udt_name),
-               K_(if_exist), K_(is_type_body), K_(force_or_validate));
+  TO_STRING_KV(K_(tenant_id),
+               K_(db_name),
+               K_(udt_name),
+               K_(if_exist),
+               K_(is_type_body),
+               K_(force_or_validate),
+               K_(exist_valid_udt));
 
   uint64_t tenant_id_;
   common::ObString db_name_;
@@ -6463,6 +6486,7 @@ public:
   bool if_exist_;
   bool is_type_body_;
   int64_t force_or_validate_;
+  bool exist_valid_udt_;
 };
 
 struct ObCancelTaskArg : public ObServerZoneArg

@@ -1310,7 +1310,8 @@ int ObSql::handle_pl_prepare(const ObString &sql,
             LOG_WARN("failed to write string", K(ret));
           } else if (OB_FAIL(sess.store_query_string(sql))) {
             LOG_WARN("store query string fail", K(ret));
-          } else if (OB_FAIL(parser.parse(sql, parse_result, parse_mode, false, false, true))) {
+          } else if (OB_FAIL(parser.parse(sql, parse_result, parse_mode,
+                                          false, false, true, pl_prepare_ctx.is_dbms_sql_))) {
             LOG_WARN("generate syntax tree failed", K(ret),
                      "sql", parse_result.contain_sensitive_data_ ? ObString(OB_MASKED_STR) : sql);
           } else if (is_mysql_mode() && ObSQLUtils::is_mysql_ps_not_support_stmt(parse_result)) {
@@ -1510,6 +1511,7 @@ int ObSql::handle_pl_execute(const ObString &sql,
     LOG_WARN("failed to init result set", K(ret));
   } else {
     context.cur_sql_ = sql;
+    context.is_from_pl_ = true;
     context.is_dynamic_sql_ = is_dynamic_sql;
     context.is_prepare_protocol_ = is_prepare_protocol;
     context.spm_ctx_.bl_key_.db_id_ = session.get_database_id();
@@ -4172,7 +4174,7 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
 
   if (OB_SUCC(ret)) {
     //租户级别的read only检查
-    if (session->is_inner() || pc_ctx.is_begin_commit_stmt()) {
+    if ((session->is_inner() && !pc_ctx.sql_ctx_.is_from_pl_) || pc_ctx.is_begin_commit_stmt()) {
       // FIXME:
       // schema拆分后，为了避免建租户时获取不到租户read only属性导致建租户失败，对于inner sql
       // 暂时跳过read only检查。实际上，对于tenant space系统表，不应该检查read only属性。

@@ -4636,6 +4636,7 @@ enum ObPrivLevel
   OB_PRIV_DB_ACCESS_LEVEL,
   OB_PRIV_SYS_ORACLE_LEVEL,   /* oracle-mode system privilege */
   OB_PRIV_OBJ_ORACLE_LEVEL,   /* oracle-mode object privilege */
+  OB_PRIV_ROUTINE_LEVEL,
   OB_PRIV_MAX_LEVEL,
 };
 
@@ -4928,23 +4929,6 @@ public:
                "packedprivarray", ObPrintPackedPrivArray(priv_array_));
 private:
   uint64_t grantee_id_;
-};
-
-int get_int_value(const common::ObString &str, int64_t &value);
-
-class ObHostnameStuct
-{
-public:
-  ObHostnameStuct() {}
-  ~ObHostnameStuct() {}
-  static const uint32_t FAKE_PORT = 0;
-  static const int MAX_IP_BITS = 128;
-  static int get_int_value(const common::ObString &str, int64_t &value);
-  static bool calc_ip(const common::ObString &host_ip, common::ObAddr &addr);
-  static bool calc_ip_mask(const common::ObString &host_ip_mask, common::ObAddr &mask);
-  static bool is_ip_match(const common::ObString &client_ip, common::ObString host_name);
-  static bool is_wild_match(const common::ObString &client_ip, const common::ObString &host_name);
-  static bool is_in_white_list(const common::ObString &client_ip, common::ObString &ip_white_list);
 };
 
 enum ObHintFormat
@@ -8244,9 +8228,9 @@ enum ObColumnGroupType : uint8_t
 };
 
 const char *const OB_COLUMN_GROUP_NAME_PREFIX = "__cg";
-const char *const OB_ROWKEY_COLUMN_GROUP_NAME = "__cg_rowkey";
-const char *const OB_DEFAULT_COLUMN_GROUP_NAME = "__cg_default";
-const char *const OB_ALL_COLUMN_GROUP_NAME = "__cg_all";
+const char *const OB_ROWKEY_COLUMN_GROUP_NAME = "__co_rowkey";
+const char *const OB_DEFAULT_COLUMN_GROUP_NAME = "__co_default";
+const char *const OB_ALL_COLUMN_GROUP_NAME = "__co_all";
 
 class ObColumnGroupSchemaHashWrapper
 {

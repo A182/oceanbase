@@ -1838,6 +1838,7 @@ DEFINE_ERROR(OB_TRANSFER_WAIT_TRANSACTION_END_TIMEOUT, -7119, -1, "HY000", "tran
 DEFINE_ERROR(OB_TABLET_GC_LOCK_CONFLICT, -7120, -1, "HY000", "tablet GC lock conflict");
 DEFINE_ERROR(OB_SEQUENCE_NOT_MATCH, -7121, -1, "HY000", "compare sequence not match");
 DEFINE_ERROR(OB_SEQUENCE_TOO_SMALL, -7122, -1, "HY000", "compare sequence too small");
+DEFINE_ERROR(OB_TRANSFER_CANNOT_START, -7123, -1, "HY000", "transfer cannot start");
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //error code for gis  -7201 ---- -7300
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2347,6 +2348,9 @@ DEFINE_ERROR(OB_ERR_VALUES_CLAUSE_NEED_HAVE_COLUMN, -11000, ER_VALUES_CLAUSE_NEE
 DEFINE_ERROR(OB_ERR_VALUES_CLAUSE_CANNOT_USE_DEFAULT_VALUES, -11001, ER_VALUES_CLAUSE_CANNOT_USE_DEFAULT_VALUES, "HY000", "A VALUES clause cannot use DEFAULT values, unless used as a source in an INSERT statement.");
 DEFINE_ERROR_EXT(OB_WRONG_PARTITION_NAME, -11002, ER_WRONG_PARTITION_NAME, "HY000", "Incorrect partition name", "Incorrect partition name '%.*s'");
 DEFINE_ERROR_EXT(OB_ERR_PLUGIN_IS_NOT_LOADED, -11003, ER_PLUGIN_IS_NOT_LOADED, "HY000", "Plugin is not loaded", "Plugin '%.*s' is not loaded");
+//11004 : OB_EST_DEVIA_TOO_LARGE
+DEFINE_ORACLE_ERROR(OB_ERR_HAS_TYPE_OR_TABLE_DEPENDENT, -11005, -1, "HY000", "cannot drop or replace a type with type or table dependents", 2303, "cannot drop or replace a type with type or table dependents");
+DEFINE_ORACLE_ERROR(OB_ERR_REPLACE_TYPE_WITH_TABLE_DEPENDENT, -11006, -1, "HY000", "cannot replace a type with table dependents", 22866, "cannot replace a type with table dependents");
 
 ////////////////////////////////////////////////////////////////
 // !!! text/blob || clob/blob erro code

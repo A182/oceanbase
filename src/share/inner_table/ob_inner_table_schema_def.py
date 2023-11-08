@@ -276,6 +276,7 @@ all_table_def = dict(
       ('ttl_definition', 'varchar:OB_MAX_DEFAULT_VALUE_LENGTH', 'false', ''),
       ('kv_attributes', 'varchar:OB_MAX_DEFAULT_VALUE_LENGTH', 'false', ''),
       ('name_generated_type', 'int', 'false', '0'),
+      ('lob_inrow_threshold', 'int', 'false', 'OB_DEFAULT_LOB_INROW_THRESHOLD'),
       ('max_used_column_group_id', 'int', 'false', '1000'),
       ('column_store', 'int', 'false', '0'),
     ],
@@ -416,6 +417,7 @@ all_user_def = dict(
       ('priv_repl_client', 'int', 'false', '0'),
       ('priv_drop_database_link', 'int', 'false', '0'),
       ('priv_create_database_link', 'int', 'false', '0'),
+      ('priv_others', 'int', 'false', '0'),
     ],
 )
 
@@ -573,6 +575,7 @@ all_database_privilege_def = dict(
       ('priv_index', 'int', 'false', '0'),
       ('priv_create_view', 'int', 'false', '0'),
       ('priv_show_view', 'int', 'false', '0'),
+      ('priv_others', 'int', 'false', '0'),
     ],
 )
 
@@ -2794,6 +2797,8 @@ def_table_schema(
       ('affected_rows', 'int'),
       ('user_message', 'longtext', 'true'),
       ('dba_message', 'varchar:OB_MAX_ERROR_MSG_LEN', 'true'),
+      ('parent_task_id', 'int', 'false', 0),
+      ('trace_id', 'varchar:OB_MAX_TRACE_ID_BUFFER_SIZE', 'true', 'NULL')
     ],
 )
 
@@ -6357,6 +6362,14 @@ def_table_schema(
 # 491 : __all_routine_privilege_history
 # 492 : __wr_sqlstat
 # 493 : __all_ncomp_dll
+# 494 : __all_aux_stat
+# 495 : __all_index_usage_info
+# 496 : __all_detect_lock_info
+# 497 : __all_client_to_server_session_info
+# 498 :__all_transfer_partition_task
+# 499 :__all_transfer_partition_task_history
+# 500 : __all_tenant_snapshot_create_job
+# 501 : __wr_sqltext
 #
 # 余留位置
 ################################################################################
@@ -13111,6 +13124,14 @@ def_table_schema(**gen_iterate_private_virtual_table_def(
 # 12444: __all_virtual_routine_privilege_history
 # 12445: __all_virtual_sqlstat
 # 12446: __all_virtual_wr_sqlstat
+# 12447 : __all_virtual_aux_stat
+# 12448: __all_virtual_detect_lock_info
+# 12449: __all_virtual_client_to_server_session_info
+# 12450: __all_virtual_sys_variable_default_value
+# 12451: __all_virtual_transfer_partition_task
+# 12452: __all_virtual_transfer_partition_task_history
+# 12453: __all_virtual_tenant_snapshot_create_job
+# 12454: __all_virtual_wr_sqltext
 # 余留位置
 #
 
@@ -13526,6 +13547,12 @@ def_table_schema(**gen_oracle_mapping_virtual_table_def('15414', all_def_keyword
 # 15424: __all_virtual_sqlstat
 # 15425: __all_virtual_wr_sqlstat
 # def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15426', all_def_keywords['__tenant_virtual_statname'])))
+# 15427: __all_virtual_aux_stat
+# 15428: __all_virtual_sys_variable
+# 15429: __all_virtual_sys_variable_default_value
+# 15430: __all_transfer_partition_task
+# 15431: __all_transfer_partition_task_history
+# 15432: __all_virtual_wr_sqltext
 # 余留位置
 
 ################################################################################
@@ -30142,7 +30169,16 @@ def_table_schema(
 #21494 V$SYS_TIME_MODEL
 #21495 DBA_WR_SYS_TIME_MODEL
 #21496 CDB_WR_SYS_TIME_MODEL
-
+#21497 DBA_OB_AUX_STATISTICS
+#21498 CDB_OB_AUX_STATISTICS
+#21499 DBA_OB_INDEX_USAGE
+#21500 DBA_OB_SYS_VARIABLES
+#21501 DBA_OB_TRANSFER_PARTITION_TASKS
+#21502 CDB_OB_TRANSFER_PARTITION_TASKS
+#21503 DBA_OB_TRANSFER_PARTITION_TASK_HISTORY
+#21504 CDB_OB_TRANSFER_PARTITION_TASK_HISTORY
+#21505 DBA_WR_SQLTEXT
+#21506 CDB_WR_SQLTEXT
 # 余留位置
 
 ################################################################################
@@ -48630,6 +48666,9 @@ def_table_schema(
 # 25272: DBA_OB_FORMAT_OUTLINES
 # 25273: DBA_WR_SQLSTAT
 # 25274: DBA_WR_SYS_TIME_MODEL
+# 25275: DBA_OB_TRANSFER_PARTITION_TASKS
+# 25276: DBA_OB_TRANSFER_PARTITION_TASK_HISTORY
+# 25277: DBA_WR_SQLTEXT
 # 余留位置
 
 #### End Data Dictionary View
@@ -54733,6 +54772,9 @@ def_table_schema(
 # 28207: GV$SYS_TIME_MODEL
 # 28208: V$SYS_TIME_MODEL
 # 28209: V$STATNAME
+# 28210: DBA_OB_AUX_STATISTICS
+# 28211: DBA_OB_SYS_VARIABLES
+
 
 ################################################################################
 # Lob Table (50000, 70000)
@@ -55539,6 +55581,8 @@ def_sys_index_table(
 # 101096 : placeholder for index of __all_mview_refresh_stats
 # 101097 : placeholder for index of __all_mview_refresh_stats
 # 101098 : placeholder for index of __all_ncomp_dll
+# 101099 : placeholder for index of __all_client_to_server_session_info
+# 101100: placeholder for index of __all_transfer_partition_task
 
 ################################################################################
 # Oracle Agent table Index

@@ -292,6 +292,7 @@ _enable_protocol_diagnose
 _enable_px_batch_rescan
 _enable_px_fast_reclaim
 _enable_px_ordered_coord
+_enable_range_extraction_for_not_in
 _enable_reserved_user_dcl_restriction
 _enable_resource_limit_spec
 _enable_skip_index
@@ -398,6 +399,7 @@ _transfer_service_wakeup_interval
 _transfer_start_retry_count
 _transfer_start_rpc_timeout
 _transfer_start_trans_timeout
+_transfer_task_tablet_count_threshold
 _tx_result_retention
 _upgrade_stage
 _wait_interval_after_parallel_ddl
