@@ -147,54 +147,70 @@ static void easy_connection_on_maccept(struct ev_loop *loop, ev_io *w, int reven
 
 /**
  * 通过easy_addr_t创建easy_listen_t
+ * `easy_io_t`结构体添加一个监听地址。它首先检查`eio`的池是否为空，
+ * 然后分配内存并初始化一个新的`easy_listen_t`结构体。接下来，它根据`eio`的配置设置监听socket的标志位，
+ * 并使用`easy_unix_domain_listen`或`easy_socket_listen`函数创建监听socket。
+ * 之后，设置TCP保持连接选项（如果适用）并返回创建的监听socket。
+ *  
+ * ===
+ * 将其添加到监听链表中，并根据传入的参数设置相应的属性。
+ * 接下来，根据reuseport和eio的状态，将监听任务分发到相应的线程或进程。如果eio尚未启动，则等待启动。
+ * 
  */
 easy_listen_t *easy_add_listen_addr(easy_io_t *eio, easy_addr_t addr,
                                     easy_io_handler_pt *handler, int udp, void *args)
 {
-    int                     i, size, cnt, fd;
-    int                     flags = (eio->tcp_defer_accept ? EASY_FLAGS_DEFERACCEPT : 0);
-    char                    buffer[32];
-    easy_listen_t           *l;
+     //---（1）定义变量
+    int                     i, size, cnt, fd;  //用于循环和计算的整数变量。
+    int                     flags = (eio->tcp_defer_accept ? EASY_FLAGS_DEFERACCEPT : 0);  //用于存储标志位的整数变量。
+    char                    buffer[32]; //一个字符数组，用于存储错误信息。
+    easy_listen_t           *l;  //一个指向`easy_listen_t`结构体的指针。
 
+    //（2）检查`eio`的池是否为空，如果为空，则输出错误日志并返回NULL。
     if (eio->pool == NULL) {
         easy_error_log("easy_connection_add_listen failure: eio->started=%d, eio->pool=%p\n",
                 eio->started, eio->pool);
         return NULL;
     }
 
-    // alloc memory
+    //（3）分配内存
     cnt = eio->io_thread_count;
     size = cnt * sizeof(ev_io);
-    size += sizeof(easy_listen_t);
+    size += sizeof(easy_listen_t);  //根据`eio`的线程数量和结构体大小计算总内存需求。
 
+    //使用`easy_pool_calloc`分配内存，如果分配失败，输出错误日志并返回NULL。
     if ((l = (easy_listen_t *) easy_pool_calloc(eio->pool, size)) == NULL) {
         easy_error_log("easy_pool_calloc failure: eio->pool=%p, size=%d\n",
                 eio->pool, size);
         return NULL;
     }
 
-    // 打开监听
-    l->addr = addr;
-    l->handler = handler;
+    //（4） 初始化新分配的内存：
+    l->addr = addr;  //设置`l->addr`为给定的`addr`。
+    l->handler = handler;  //设置`l->handler`为给定的`handler`。
 
+    //（5）根据`eio`的配置设置标志位`flags`。
     if (eio->no_reuseport == 0) {
         flags |= EASY_FLAGS_NOLISTEN;
     }
-
+     //（6） 计算端口号`port`，并根据端口号的范围和`eio`的配置设置标志位`EASY_FLAGS_REUSEPORT`。
     uint16_t port = ntohs(addr.port);
     if (port < 1024) {
         fd = -1;
         flags |= EASY_FLAGS_REUSEPORT;
     } else if (port >= UINT16_MAX) {
+         //--（7）【重点】 创建一个监听socket -- 这里是 Uinx模式
         if ((fd = easy_unix_domain_listen((char*)args, eio->listen_backlog)) < 0) {
             easy_error_log("easy_socket_listen unix domain failure: addr=%s\n", (char*)args);
             return NULL;
         }
     } else if ((fd = easy_socket_listen(udp, &l->addr, &flags, eio->listen_backlog)) < 0) {
+         //--（7）【重点】 创建一个监听socket -- 这里是 普通socket模式  tcp或者 udp
         easy_error_log("easy_socket_listen failure: host=%s\n", easy_inet_addr_to_str(&l->addr, buffer, 32));
         return NULL;
     } else if (udp == 0 && eio->tcp_keepalive == 1) {
         // open tcp_keepalive
+        // 如果使用的是TCP协议，且`eio->tcp_keepalive`为1，则设置TCP保持连接选项。
         if (easy_socket_set_opt(fd, SO_KEEPALIVE, 1)) {
             easy_error_log("set SO_KEEPALIVE error: %d, fd=%d\n", errno, fd);
         } else {
@@ -204,30 +220,39 @@ easy_listen_t *easy_add_listen_addr(easy_io_t *eio, easy_addr_t addr,
         }
     }
 
-    // 初始化
+    // 这个 cnt 是上面的 线程数量
     for (i = 0; i < cnt; i++) {
+         /*
+        为每个监听器 初始化一个 ev_io的结构体。
+        根据udp标志，设置不同的回调函数：如果udp为真，则调用easy_connection_on_udpread；否则，调用easy_connection_on_accept。 
+        */
         if (udp) {
             ev_io_init(&l->read_watcher[i], easy_connection_on_udpread, fd, EV_READ | EV_CLEANUP);
         } else {
 
             ev_io_init(&l->read_watcher[i], easy_connection_on_accept, fd, EV_READ | EV_CLEANUP);
         }
-
+        //为每个ev_io结构体设置优先级，将其设置为EV_MAXPRI。
         ev_set_priority(&l->read_watcher[i], EV_MAXPRI);
-        l->read_watcher[i].data = l;
+        l->read_watcher[i].data = l;  //// 将ev_io结构体的数据域设置为指向l的指针。
     }
 
+    //根据eio->no_reuseport的值，设置l->reuseport的值。如果reuseport为0，则不使用reuseport功能。
     if (eio->no_reuseport == 0) {
         l->reuseport = (flags & EASY_FLAGS_REUSEPORT) ? 1 : 0;
     }
 
-    l->fd = fd;
-    l->accept_count = eio->accept_count;
+    l->fd = fd; //将l的fd设置为传入的fd。
+    l->accept_count = eio->accept_count; //将l的accept_count设置为eio->accept_count。
 
+    //根据eio->no_reuseport的值，设置l->reuseport的值。如果reuseport为0，则不使用reuseport功能。
     if (!l->reuseport) {
         easy_info_log("easy_socket_listen: host=%s, fd=%d", easy_inet_addr_to_str(&addr, buffer, 32), fd);
     }
 
+    /*
+    如果eio->started为真，表示eio已经启动，那么根据reuseport的值，将监听任务分发到相应的线程。如果reuseport为0，则只使用一个线程进行监听。
+    */
     if (eio->started) {
         if (l->reuseport) {
             for (i = 0; i < eio->io_thread_count; i++) {
