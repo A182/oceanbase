@@ -400,28 +400,45 @@ int ObNetEasy::add_listen_(const uint32_t port, easy_io_t * eio, ObReqHandler &h
   return ret;
 }
 
+/*
+    -  `listener`：监听器对象，用于接收客户端连接
+       -  `eio`：EasyIO实例，用于处理网络IO事件
+       -  `handler`：请求处理器对象，用于处理客户端请求
+       -  `transport`：请求传输对象，用于封装客户端请求和响应
+*/
 int ObNetEasy::net_register_and_add_listen_(ObListener &listener, easy_io_t *eio, ObReqHandler &handler, ObReqTransport *&transport)
 {
   int ret = OB_SUCCESS;
   easy_listen_t *listen = NULL;
   easy_io_threads_pipefd_pool_t pipefd_pool;
-  memset(&pipefd_pool, 0, sizeof(pipefd_pool));
-
+  /*
+  1. `memset` 是一个内存设置函数，用于将指定内存区域的值设置为一个指定的值。
+  2. `&pipefd_pool` 表示 `pipefd_pool` 变量的地址。这里假设 `pipefd_pool` 是一个指针，指向一个内存区域。
+  3. `0` 是要设置的值。在这里，将 `pipefd_pool` 指向的内存区域的所有字节设置为 0。
+  4. `sizeof(pipefd_pool)` 表示 `pipefd_pool` 指针所指向的内存区域的大小。这个值用于确定要从哪里开始设置内存值。
+  */
+  memset(&pipefd_pool, 0, sizeof(pipefd_pool)); //`pipefd_pool` 指向的内存区域的所有字节设置为 0
+   
   if (OB_ISNULL(eio)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("eio is NULL", KP(eio));
   } else {
       pipefd_pool.count = eio->io_thread_count;
       if (OB_FAIL(listener.regist(eio->magic, pipefd_pool.count, pipefd_pool.pipefd))) {
+        //调用`listener.regist()`方法，将监听器注册到EasyIO中。如果注册失败，记录错误日志。
         LOG_ERROR("pipefd net register failed!", K(ret));
       } else if (proto_cnt_ >= MAX_LISTEN_CNT) {
+        //检查是否达到上限MAX_LISTEN_CNT ，是否注册的监听器过多
         ret = OB_NOT_SUPPORTED;
         LOG_ERROR("too many listen handler registered", K(ret));
+
+        //easy_add_pipefd_listen_for_connection 为当前监听器添加一个pipefd，用于接收客户端连接。如果添加失败，记录错误日志。
       } else if (NULL == (listen = easy_add_pipefd_listen_for_connection(eio, handler.ez_handler(), &pipefd_pool))) {
         ret = OB_SERVER_LISTEN_ERROR;
         LOG_DBA_ERROR(OB_SERVER_LISTEN_ERROR,
                       "msg", "easy_add_pipefd_listen_for_connection! failed!", K(ret));
       } else {
+        //OB_NEW 创建一个新的`ObReqTransport`对象，用于处理客户端请求。将该对象添加到传输列表中，并将索引赋值给`transport`。
         transports_[proto_cnt_] = OB_NEW(ObReqTransport, ObModIds::OB_RPC, eio, handler.ez_handler());
         transport = transports_[proto_cnt_++];
         LOG_INFO("listen start,", K(eio->magic));

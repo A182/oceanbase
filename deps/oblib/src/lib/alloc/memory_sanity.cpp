@@ -122,6 +122,7 @@ inline void DoNotOptimize(Tp const& value)
 
 EXTERN_C_BEGIN
 
+
 void *memset(void *s, int c, size_t n)
 {
   static void *(*real_func)(void *, int, size_t)
